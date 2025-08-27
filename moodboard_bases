@@ -1,0 +1,34 @@
+```base
+formulas:
+  moons: |
+    (if(number(score) >= 1, "🌕", if(number(score) >= 0.5, "🌗", "🌑"))) + (if(number(score) >= 2, "🌕", if(number(score) >= 1.5, "🌗", "🌑"))) + (if(number(score) >= 3, "🌕", if(number(score) >= 2.5, "🌗", "🌑"))) + (if(number(score) >= 4, "🌕", if(number(score) >= 3.5, "🌗", "🌑"))) + (if(number(score) >= 5, "🌕", if(number(score) >= 4.5, "🌗", "🌑"))) + (if(number(score) >= 6, "🌕", if(number(score) >= 5.5, "🌗", "🌑"))) + (if(number(score) >= 7, "🌕", if(number(score) >= 6.5, "🌗", "🌑")))
+  review: |
+    formula.moons +
+    " | " +
+    (if(number(score) < 1.5, "😞",
+       if(number(score) < 2.5, "☹️",
+       if(number(score) < 3.5, "😕",
+       if(number(score) < 4.5, "😐",
+       if(number(score) < 5.5, "🙂",
+       if(number(score) < 6.5, "😃", "😎")))))))
+views:
+  - type: table
+    name: Table
+    filters:
+      and:
+        - file.hasTag("Log/Daily")
+        - up.contains(link(this.file.name))
+    order:
+      - file.name
+      - formula.review
+      - score
+    sort:
+      - property: file.name
+        direction: ASC
+      - property: formula.moons
+        direction: DESC
+      - property: formula.score
+        direction: ASC
+    columnSize:
+      note.score: 29
+```
