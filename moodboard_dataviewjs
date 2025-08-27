@@ -1,0 +1,45 @@
+```dataviewjs
+    let weekStr = dv.current().file.name; 
+    let \[year, weekNum\] = weekStr.split("-W").map(x => parseInt(x));
+    let monday = moment().isoWeekYear(year).isoWeek(weekNum).startOf("isoWeek");
+    let sundayFile = monday.clone().add(6, "days").format("YYYY-MM-DD");
+
+    let pages = dv.pages("").where(p => p.Week === `${year}-W${weekNum.toString().padStart(2,"0")}` && typeof p.score === "number");
+    let rows = [];
+    let total = 0;
+    
+    function getMood(score) {
+      if (score < 1.5) return "😞";
+      if (score < 2.5) return "☹️";
+      if (score < 3.5) return "😕";
+      if (score < 4.5) return "😐";
+      if (score < 5.5) return "🙂";
+      if (score < 6.5) return "😃";
+      return "😎";
+    }
+    
+    function reviewToMoons(score) {
+      let moons = "";
+      for (let i = 1; i <= 7; i++) {
+        if (score >= i) moons += "🌕";
+        else if (score >= i - 0.5) moons += "🌗";
+        else moons += "🌑";
+      }
+      let tooltip = `${score}/7`;
+      return `<span title="${tooltip}">${moons} | ${getMood(score)}</span>`;
+    }
+    
+    for (let p of pages) {
+      total += p.score;
+      rows.push([p.file.link, reviewToMoons(p.Review)]);
+    }
+    
+    let today = moment();
+    let sundayDate = monday.clone().add(6, "days");
+    let sundayExists = dv.page(sundayFile) !== null && sundayDate.isSameOrBefore(today, "day");
+    let divisor = sundayExists ? 7 : rows.length;
+    let avg = (divisor > 0 ? total / divisor : 0).toFixed(1);
+    let mood = getMood(avg);
+    
+    dv.table(["Nota", `${avg}🌕 | ${mood}`], rows);
+```
