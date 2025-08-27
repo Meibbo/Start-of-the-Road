@@ -1,87 +1,83 @@
 ```dataviewjs
-// ====== CONFIG ======
-const DAILY_FOLDER = "Life/Calendar/Days"; // change if your daily notes live in another folder
-// ====================
+// ====== CONFIG (no need to change unless you moved folders) ======
+const DAILY_FOLDER = "Life/Calendar/Days";
+// Emojis used (change if you prefer other moon glyphs)
+const FULL_MOON = "🌕";
+const HALF_MOON = "🌗";   // half-moon shown when decimal >= .5
+const EMPTY_MOON = "🌑";
+// Faces from lowest to highest
+const FACES = ["😞","☹️","😕","😐","🙂","😃","😎"];
+// =================================================================
 
-const weekName = dv.current().file.name;           // e.g. "2025-W35"
-const weekPage = dv.page(weekName);                // Dataview page for the week (may be undefined)
+const weekName = dv.current().file.name; // e.g. "2025-W35"
+const weekPage = dv.page(weekName);
 
-// normalize various shapes of the `up` property into strings
 function upToStrings(up){
   if(up === undefined || up === null) return [];
   if(Array.isArray(up)) return up.map(x => String(x));
   return [String(up)];
 }
-function stripBrackets(s){
-  return String(s).replace(/^\[\[|\]\]$/g, "").trim();
-}
-
-// returns true if an up value (string form) refers to this weekly note
+function stripBrackets(s){ return String(s).replace(/^\[\[|\]\]$/g, "").trim(); }
 function upRefersToWeek(upStr){
   const cleaned = stripBrackets(upStr);
-  if(cleaned === weekName) return true;                       // exact name match
-  if(weekPage && upStr.includes(weekPage.file.path)) return true; // matches path if we found the week page
-  if(upStr.includes(weekName)) return true;                   // partial-match fallback
+  if(cleaned === weekName) return true;
+  if(weekPage && String(upStr).includes(weekPage.file.path)) return true;
+  if(String(upStr).includes(weekName)) return true;
   return false;
 }
 
-// pick a source: the Daily Notes folder if there are pages there, otherwise whole vault
 let folderPages = dv.pages(`"${DAILY_FOLDER}"`);
 if(!folderPages || folderPages.length === 0) folderPages = dv.pages();
-
-// collect pages that define an `up` property
 let candidates = folderPages.where(p => p.up).array();
+let matched = candidates.filter(p => upToStrings(p.up).some(u => upRefersToWeek(u)));
 
-// filter to the ones that actually reference this week
-let matched = candidates.filter(p => {
-  const ups = upToStrings(p.up);
-  return ups.some(u => upRefersToWeek(u));
-});
-
-// ---------- Output ----------
 if(matched.length){
-  // sort by filename (adjust if you prefer date parsing)
   matched.sort((a,b) => a.file.name.localeCompare(b.file.name));
 
-  // display table: Day (link) and Score (number or —)
-  dv.table(
-    ["Day","Score"],
-    matched.map(p => [
-      p.file.link,
-      (() => {
-        const n = Number(p.score);
-        return Number.isFinite(n) ? n : "—";
-      })()
-    ])
-  );
+  // build rows: [Day, ratingElement]
+  const rows = matched.map(p => {
+    const rawScore = Number(p.score);
+    const hasNumeric = Number.isFinite(rawScore);
 
-  // compute numeric formulas
-  const scores = matched.map(p => Number(p.score)).filter(n => Number.isFinite(n));
-  if(scores.length){
-    const sum = scores.reduce((a,b) => a + b, 0);
-    dv.paragraph(`**Average:** ${(sum / scores.length).toFixed(2)}  \n**Min:** ${Math.min(...scores)}  \n**Max:** ${Math.max(...scores)}`);
-  } else {
-    dv.paragraph("No numeric `score` values found in the matching notes.");
-  }
+    // face selection based on numeric value (user rules):
+    let face = "—";
+    if(hasNumeric){
+      if(rawScore <= 1) face = FACES[0];
+      else if(rawScore <= 2) face = FACES[1];
+      else if(rawScore <= 3) face = FACES[2];
+      else if(rawScore <= 4) face = FACES[3];
+      else if(rawScore <= 5) face = FACES[4];
+      else if(rawScore <= 6.2) face = FACES[5];
+      else face = FACES[6];
+    }
+
+    // visual moons: compute display using clamped value (0..7)
+    const displayValue = hasNumeric ? Math.max(0, Math.min(7, rawScore)) : 0;
+    const fullCount = Math.floor(displayValue);
+    const decimal = displayValue - fullCount;
+    const halfCount = decimal >= 0.5 ? 1 : 0;
+    const emptyCount = 7 - fullCount - halfCount;
+
+    const moons = FULL_MOON.repeat(fullCount) + (halfCount ? HALF_MOON : "") + EMPTY_MOON.repeat(Math.max(0, emptyCount));
+
+    // tooltip string (shows original numeric if present, one decimal; otherwise —/7)
+    const tooltip = hasNumeric ? `${rawScore.toFixed(1)}/7` : `—/7`;
+
+    // create an element with tooltip (title) so hovering shows the numeric
+    const el = dv.el("span", `${moons} | ${face}`, { title: tooltip });
+
+    return [p.file.link, el];
+  });
+
+  dv.table(["Day", "Rating"], rows);
+
 } else {
-  // nothing matched — show diagnostics so you can inspect what's stored in `up` across notes
   dv.paragraph(`No daily notes found that link to **${weekName}** via the \`up\` property.`);
-
   if(candidates.length){
-    dv.paragraph("Diagnostic: here are pages that *do* have an `up` property (first 50):");
-    const diag = candidates.slice(0,50).map(p => [
-      p.file.link,
-      upToStrings(p.up).map(stripBrackets).join(" / ")
-    ]);
-    dv.table(["Page", "up (normalized)"], diag);
-  } else {
-    dv.paragraph("No pages with an `up` property were found in the selected folder/vault.");
-  }
-
-  dv.paragraph("Quick checks:\n" +
-    "- `up` should be a link (e.g. `up: [[2025-W35]]`) or include the week name/path.\n" +
-    "- `score` should be a number (e.g. `score: 5`), not a word like `five`.\n" +
-    `- If your daily notes are not in the folder named "${DAILY_FOLDER}", either move them there or change the DAILY_FOLDER variable at the top of this snippet.`
-  );
+    dv.paragraph("Diagnostic: pages with an `up` property (first 50):");
+    const diag = candidates.slice(0,50).map(p => [p.file.link, upToStrings(p.up).map(stripBrackets).join(" / ")]);
+    dv.table(["Page","up (normalized)"], diag);
+  } else dv.paragraph("No pages with an `up` property were found in the selected folder/vault.");
 }
+
 ```
